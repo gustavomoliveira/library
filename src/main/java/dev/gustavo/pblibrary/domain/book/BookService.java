@@ -50,7 +50,7 @@ public class BookService {
         return BookMapper.toDTO(existingBook.get());
     }
 
-    public List<BookResponseDTO> findBookByAuthor(String author) {
+    public List<BookResponseDTO> findBooksByAuthor(String author) {
         List<Book> existingBooks = repository.findByAuthor(author);
 
         if (existingBooks.isEmpty()) throw new ResourceNotFoundException("No books found for the given author.");
@@ -58,11 +58,27 @@ public class BookService {
         return existingBooks.stream().map(BookMapper::toDTO).toList();
     }
 
-    public List<BookResponseDTO> findBookByTitle(String title) {
+    public List<BookResponseDTO> findBooksByTitle(String title) {
         List<Book> existingBooks = repository.findByTitle(title);
 
         if (existingBooks.isEmpty()) throw new ResourceNotFoundException("No books found for the given title.");
 
         return existingBooks.stream().map(BookMapper::toDTO).toList();
+    }
+
+    public List<BookResponseDTO> findAllBooks() {
+        List<Book> existingBooks = repository.findAll();
+
+        if (existingBooks.isEmpty()) throw new ResourceNotFoundException("No books registered in the library.");
+
+        return existingBooks.stream().map(BookMapper::toDTO).toList();
+    }
+
+    public List<BookResponseDTO> findBooks(String title, String author) {
+        if (title == null && author == null) return findAllBooks();
+
+        if (title != null) return findBooksByTitle(title);
+
+        return findBooksByAuthor(author);
     }
 }
