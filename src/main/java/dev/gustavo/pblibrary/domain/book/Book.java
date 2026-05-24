@@ -22,9 +22,16 @@ public class Book {
     @Column(unique = true, nullable = false)
     private String isbn;
 
-    public Book(String title, String author, String isbn) {
+    @Column(nullable = false)
+    private Integer totalCopies;
+
+    private Integer availableCopies;
+
+    public Book(String title, String author, String isbn, Integer totalCopies) {
         this.title = title;
         this.author = author;
         this.isbn = isbn;
+        this.totalCopies = totalCopies;
+        this.availableCopies = totalCopies;
     }
 }
