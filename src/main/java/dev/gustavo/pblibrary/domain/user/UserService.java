@@ -38,23 +38,16 @@ public class UserService {
 
     public List<UserResponseDTO> findUserByName(String name) {
         List<User> users = repository.findByName(name);
-
-        if (users.isEmpty()) throw new ResourceNotFoundException("No users found for the given name.");
-
         return users.stream().map(UserMapper::toDTO).toList();
     }
 
     public List<UserResponseDTO> findAllUsers() {
         List<User> users = repository.findAll();
-
-        if (users.isEmpty()) throw new ResourceNotFoundException("Users not found.");
-
         return users.stream().map(UserMapper::toDTO).toList();
     }
 
     public List<UserResponseDTO> findUsers(String name) {
         if (name == null) return findAllUsers();
-
         return findUserByName(name);
     }
 }
