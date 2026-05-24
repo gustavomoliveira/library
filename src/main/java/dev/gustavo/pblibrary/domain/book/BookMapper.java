@@ -2,7 +2,7 @@ package dev.gustavo.pblibrary.domain.book;
 
 public class BookMapper {
 
-    public static Book toEntity(BookDTO dto) {
+    public static Book toEntity(BookRequestDTO dto) {
         return new Book(dto.title(), dto.author(), dto.isbn());
     }
 
