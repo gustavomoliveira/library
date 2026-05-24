@@ -15,12 +15,12 @@ public class BookService {
         this.repository = repository;
     }
 
-    public BookResponseDTO createBook(BookDTO dto) {
+    public BookResponseDTO createBook(BookRequestDTO dto) {
         Book book = BookMapper.toEntity(dto);
         return BookMapper.toDTO(repository.save(book));
     }
 
-    public BookResponseDTO updateBook(Long id, BookDTO dto) {
+    public BookResponseDTO updateBook(Long id, BookRequestDTO dto) {
         Optional<Book> existingBook = repository.findById(id);
 
         if (existingBook.isEmpty()) throw new ResourceNotFoundException("Book not found.");

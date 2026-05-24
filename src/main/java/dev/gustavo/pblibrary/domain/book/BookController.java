@@ -17,13 +17,13 @@ public class BookController {
     }
 
     @PostMapping
-    public ResponseEntity<BookResponseDTO> createBook(@RequestBody BookDTO dto) {
+    public ResponseEntity<BookResponseDTO> createBook(@RequestBody BookRequestDTO dto) {
          BookResponseDTO response = service.createBook(dto);
          return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<BookResponseDTO> updateBook(@PathVariable Long id, @RequestBody BookDTO dto) {
+    public ResponseEntity<BookResponseDTO> updateBook(@PathVariable Long id, @RequestBody BookRequestDTO dto) {
         BookResponseDTO response = service.updateBook(id, dto);
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
