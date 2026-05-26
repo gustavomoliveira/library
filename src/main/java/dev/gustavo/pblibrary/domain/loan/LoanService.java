@@ -6,7 +6,6 @@ import dev.gustavo.pblibrary.domain.user.User;
 import dev.gustavo.pblibrary.domain.user.UserRepository;
 import dev.gustavo.pblibrary.exception.*;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.RequestParam;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -30,7 +29,7 @@ public class LoanService {
         Loan loan = LoanMapper.toEntity(book, user);
 
         if (book.getAvailableCopies() <= 0) throw new BusinessException("No copies of the book available to loan.");
-        if (loanRepository.findByUser_IdAndReturnDateIsNull(user.getId())) throw new BusinessException("The user already has an active loan.");
+        if (loanRepository.existsByUser_IdAndReturnDateIsNull(user.getId())) throw new BusinessException("The user already has an active loan.");
 
         book.setAvailableCopies(book.getAvailableCopies() - 1);
         bookRepository.save(book);
