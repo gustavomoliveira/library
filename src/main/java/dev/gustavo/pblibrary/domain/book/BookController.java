@@ -34,6 +34,12 @@ public class BookController {
         return ResponseEntity.status(HttpStatus.NO_CONTENT).build();
     }
 
+    @GetMapping("{id}")
+    public ResponseEntity<BookResponseDTO> getBookById(@PathVariable Long id) {
+        BookResponseDTO response = service.findBookById(id);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
     @GetMapping("/isbn/{isbn}")
     public ResponseEntity<BookResponseDTO> getBookByIsbn(@PathVariable String isbn) {
         BookResponseDTO response = service.findBookByIsbn(isbn);

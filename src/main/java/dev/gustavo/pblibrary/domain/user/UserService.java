@@ -31,6 +31,11 @@ public class UserService {
         repository.delete(user);
     }
 
+    public UserResponseDTO findUserById(Long id) {
+        User user = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("User not found."));
+        return UserMapper.toDTO(user);
+    }
+
     public UserResponseDTO findUserByEmail(String email) {
         User user = repository.findByEmail(email).orElseThrow(() -> new ResourceNotFoundException("User not found."));
         return UserMapper.toDTO(user);
