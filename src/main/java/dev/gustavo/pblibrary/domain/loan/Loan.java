@@ -12,7 +12,6 @@ import java.time.LocalDate;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
-@Table(name = "loans")
 public class Loan {
 
     @Id

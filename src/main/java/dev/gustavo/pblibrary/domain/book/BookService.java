@@ -32,6 +32,11 @@ public class BookService {
         repository.delete(book);
     }
 
+    public BookResponseDTO findBookById(Long id) {
+        Book book = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Book not found."));
+        return BookMapper.toDTO(book);
+    }
+
     public BookResponseDTO findBookByIsbn(String isbn) {
         Book book = repository.findByIsbn(isbn).orElseThrow(() -> new ResourceNotFoundException("Book not found."));
         return BookMapper.toDTO(book);
