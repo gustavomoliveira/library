@@ -6,6 +6,7 @@ import dev.gustavo.pblibrary.domain.user.User;
 import dev.gustavo.pblibrary.domain.user.UserRepository;
 import dev.gustavo.pblibrary.exception.*;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -23,6 +24,7 @@ public class LoanService {
         this.userRepository = userRepository;
     }
 
+    @Transactional
     public LoanResponseDTO createLoan(LoanRequestDTO dto) {
         Book book = bookRepository.findById(dto.bookId()).orElseThrow(() -> new ResourceNotFoundException("Book not found."));
         User user = userRepository.findById(dto.userId()).orElseThrow(() -> new ResourceNotFoundException("User not found."));
@@ -37,6 +39,7 @@ public class LoanService {
         return LoanMapper.toDTO(loanRepository.save(loan));
     }
 
+    @Transactional
     public LoanResponseDTO returnLoan(Long id) {
         Loan loan = loanRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Loan not found."));
 
