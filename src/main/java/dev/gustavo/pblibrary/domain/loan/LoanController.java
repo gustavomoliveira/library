@@ -51,4 +51,10 @@ public class LoanController {
         List<LoanResponseDTO> response = service.findLoansByBook(id);
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
+
+    @GetMapping("/{id}/history")
+    public ResponseEntity<List<LoanHistoryResponseDTO>> getLoanHistory(@PathVariable Long id) {
+        List<LoanHistoryResponseDTO> response = service.findLoanHistory(id);
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
 }
