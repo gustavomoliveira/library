@@ -1,13 +1,13 @@
 package dev.gustavo.pblibrary.domain.book;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.gustavo.pblibrary.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import tools.jackson.databind.json.JsonMapper;
 
 import java.util.List;
 
@@ -17,16 +17,13 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-// Nota: se o seu Spring Boot for anterior à 3.4, troque @MockitoBean por
-// @MockBean (import org.springframework.boot.test.mock.mockito.MockBean).
 @WebMvcTest(BookController.class)
 class BookControllerTest {
 
     @Autowired
     private MockMvc mockMvc;
 
-    @Autowired
-    private ObjectMapper objectMapper;
+    private final JsonMapper jsonMapper = JsonMapper.builder().build();
 
     @MockitoBean
     private BookService service;
@@ -40,7 +37,7 @@ class BookControllerTest {
 
         mockMvc.perform(post("/books")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(dto)))
+                        .content(jsonMapper.writeValueAsString(dto)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.title").value("Clean Code"));
     }

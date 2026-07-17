@@ -2,19 +2,12 @@ package dev.gustavo.pblibrary.domain.book;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.boot.test.autoconfigure.orm.jpa.TestEntityManager;
+import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.boot.jpa.test.autoconfigure.TestEntityManager;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-/**
- * Simula duas "sessões" lendo o mesmo Book e tentando escrever nele.
- * O entityManager.clear() é o que força o Hibernate a tratar copy1 e copy2
- * como instâncias completamente separadas, cada uma com sua própria versão
- * lida no momento do SELECT — reproduzindo o que aconteceria com duas
- * requisições HTTP concorrentes.
- */
 @DataJpaTest
 class BookOptimisticLockingTest {
 
@@ -36,8 +29,11 @@ class BookOptimisticLockingTest {
         entityManager.clear();
         Book copy2 = bookRepository.findById(id).orElseThrow();
 
+        entityManager.clear();
+
         copy1.setAvailableCopies(4);
         bookRepository.saveAndFlush(copy1);
+        entityManager.clear();
 
         copy2.setAvailableCopies(3);
         assertThrows(ObjectOptimisticLockingFailureException.class,

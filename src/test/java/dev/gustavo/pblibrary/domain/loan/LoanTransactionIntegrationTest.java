@@ -9,20 +9,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-// Nota: se o seu Spring Boot for anterior à 3.4, troque @MockitoBean por
-// @MockBean (import org.springframework.boot.test.mock.mockito.MockBean).
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
-/**
- * Este teste NÃO usa mocks para BookRepository/UserRepository — eles são os beans reais,
- * conectados ao banco H2 de teste (ver src/test/resources/application.properties).
- * Apenas o LoanRepository é substituído por um mock, para forçar uma falha depois que
- * o Book já foi salvo — exatamente o cenário que o @Transactional precisa cobrir.
- */
 @SpringBootTest
 class LoanTransactionIntegrationTest {
 
