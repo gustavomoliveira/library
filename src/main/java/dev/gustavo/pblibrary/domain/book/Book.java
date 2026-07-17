@@ -27,6 +27,9 @@ public class Book {
 
     private Integer availableCopies;
 
+    @Version
+    private Integer version;
+
     public Book(String title, String author, String isbn, Integer totalCopies) {
         this.title = title;
         this.author = author;
