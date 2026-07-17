@@ -9,11 +9,13 @@ import dev.gustavo.pblibrary.exception.ResourceNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -33,6 +35,9 @@ class LoanServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private LoanHistoryRepository loanHistoryRepository;
 
     @InjectMocks
     private LoanService service;
@@ -68,6 +73,11 @@ class LoanServiceTest {
         assertThat(book.getAvailableCopies()).isEqualTo(4);
         verify(bookRepository).save(book);
         verify(loanRepository).save(any(Loan.class));
+
+        ArgumentCaptor<LoanHistory> historyCaptor = ArgumentCaptor.forClass(LoanHistory.class);
+        verify(loanHistoryRepository).save(historyCaptor.capture());
+        assertThat(historyCaptor.getValue().getEventType()).isEqualTo(LoanEventType.LOAN_CREATED);
+        assertThat(historyCaptor.getValue().getLoan()).isEqualTo(loan);
     }
 
     @Test
@@ -79,6 +89,8 @@ class LoanServiceTest {
         assertThatThrownBy(() -> service.createLoan(dto))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("Book not found.");
+
+        verify(loanHistoryRepository, never()).save(any());
     }
 
     @Test
@@ -91,6 +103,8 @@ class LoanServiceTest {
         assertThatThrownBy(() -> service.createLoan(dto))
                 .isInstanceOf(ResourceNotFoundException.class)
                 .hasMessage("User not found.");
+
+        verify(loanHistoryRepository, never()).save(any());
     }
 
     @Test
@@ -107,6 +121,7 @@ class LoanServiceTest {
 
         verify(bookRepository, never()).save(any());
         verify(loanRepository, never()).save(any());
+        verify(loanHistoryRepository, never()).save(any());
     }
 
     @Test
@@ -122,6 +137,7 @@ class LoanServiceTest {
                 .hasMessage("The user already has an active loan.");
 
         verify(bookRepository, never()).save(any());
+        verify(loanHistoryRepository, never()).save(any());
     }
 
     @Test
@@ -137,6 +153,10 @@ class LoanServiceTest {
         assertThat(loan.getReturnDate()).isEqualTo(LocalDate.now());
         assertThat(book.getAvailableCopies()).isEqualTo(5);
         verify(bookRepository).save(book);
+
+        ArgumentCaptor<LoanHistory> historyCaptor = ArgumentCaptor.forClass(LoanHistory.class);
+        verify(loanHistoryRepository).save(historyCaptor.capture());
+        assertThat(historyCaptor.getValue().getEventType()).isEqualTo(LoanEventType.LOAN_RETURNED);
     }
 
     @Test
@@ -145,6 +165,8 @@ class LoanServiceTest {
 
         assertThatThrownBy(() -> service.returnLoan(99L))
                 .isInstanceOf(ResourceNotFoundException.class);
+
+        verify(loanHistoryRepository, never()).save(any());
     }
 
     @Test
@@ -158,6 +180,7 @@ class LoanServiceTest {
                 .hasMessage("Loan already returned");
 
         verify(bookRepository, never()).save(any());
+        verify(loanHistoryRepository, never()).save(any());
     }
 
     @Test
@@ -196,5 +219,31 @@ class LoanServiceTest {
         List<LoanResponseDTO> response = service.findLoansByBook(1L);
 
         assertThat(response).hasSize(1);
+    }
+
+    @Test
+    void findLoanHistory_quandoEmprestimoExiste_deveRetornarEventosOrdenados() {
+        LoanHistory created = new LoanHistory(loan, LoanEventType.LOAN_CREATED);
+        LoanHistory returned = new LoanHistory(loan, LoanEventType.LOAN_RETURNED);
+
+        when(loanRepository.existsById(1L)).thenReturn(true);
+        when(loanHistoryRepository.findByLoan_IdOrderByEventDateAsc(1L)).thenReturn(List.of(created, returned));
+
+        List<LoanHistoryResponseDTO> response = service.findLoanHistory(1L);
+
+        assertThat(response).hasSize(2);
+        assertThat(response.get(0).eventType()).isEqualTo(LoanEventType.LOAN_CREATED);
+        assertThat(response.get(1).eventType()).isEqualTo(LoanEventType.LOAN_RETURNED);
+    }
+
+    @Test
+    void findLoanHistory_quandoEmprestimoNaoExiste_deveLancarResourceNotFoundException() {
+        when(loanRepository.existsById(99L)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.findLoanHistory(99L))
+                .isInstanceOf(ResourceNotFoundException.class)
+                .hasMessage("Loan not found.");
+
+        verify(loanHistoryRepository, never()).findByLoan_IdOrderByEventDateAsc(any());
     }
 }

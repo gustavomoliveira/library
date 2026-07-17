@@ -1,4 +1,6 @@
 package dev.gustavo.pblibrary.domain.loan;
 
-public record LoanHistoryResponseDTO() {
+import java.time.LocalDateTime;
+
+public record LoanHistoryResponseDTO(Long id, Long loanId, LoanEventType eventType, LocalDateTime eventDate) {
 }

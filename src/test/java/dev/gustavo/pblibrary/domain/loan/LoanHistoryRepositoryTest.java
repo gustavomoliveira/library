@@ -40,9 +40,6 @@ class LoanHistoryRepositoryTest {
 
     @Test
     void findByLoan_IdOrderByEventDateAsc_deveRetornarEventosNaOrdemCorreta() throws InterruptedException {
-        // O evento CREATED é construído primeiro (eventDate mais antigo), mas
-        // salvo por último — de propósito, para provar que a query ordena pelo
-        // eventDate real, e não pela ordem em que os registros foram inseridos.
         LoanHistory created = new LoanHistory(loan, LoanEventType.LOAN_CREATED);
         Thread.sleep(5);
         LoanHistory returned = new LoanHistory(loan, LoanEventType.LOAN_RETURNED);
