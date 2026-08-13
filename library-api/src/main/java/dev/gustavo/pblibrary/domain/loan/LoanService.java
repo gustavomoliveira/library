@@ -5,6 +5,10 @@ import dev.gustavo.pblibrary.domain.book.BookRepository;
 import dev.gustavo.pblibrary.domain.user.User;
 import dev.gustavo.pblibrary.domain.user.UserRepository;
 import dev.gustavo.pblibrary.exception.*;
+import dev.gustavo.pblibrary.infrastructure.client.FineRequestDTO;
+import dev.gustavo.pblibrary.infrastructure.client.FinesApiClient;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,17 +18,22 @@ import java.util.List;
 @Service
 public class LoanService {
 
+    private static final Logger log = LoggerFactory.getLogger(LoanService.class);
+
     private final LoanRepository loanRepository;
     private final BookRepository bookRepository;
     private final UserRepository userRepository;
     private final LoanHistoryRepository loanHistoryRepository;
+    private final FinesApiClient finesApiClient;
 
     public LoanService(LoanRepository loanRepository, BookRepository bookRepository,
-                       UserRepository userRepository, LoanHistoryRepository loanHistoryRepository) {
+                       UserRepository userRepository, LoanHistoryRepository loanHistoryRepository,
+                       FinesApiClient finesApiClient) {
         this.loanRepository = loanRepository;
         this.bookRepository = bookRepository;
         this.userRepository = userRepository;
         this.loanHistoryRepository = loanHistoryRepository;
+        this.finesApiClient = finesApiClient;
     }
 
     @Transactional
@@ -62,7 +71,22 @@ public class LoanService {
         Loan savedLoan = loanRepository.save(loan);
         loanHistoryRepository.save(new LoanHistory(savedLoan, LoanEventType.LOAN_RETURNED));
 
+        notifyFinesApi(savedLoan);
+
         return LoanMapper.toDTO(savedLoan);
+    }
+
+    private void notifyFinesApi(Loan loan) {
+        try {
+            FineRequestDTO request = new FineRequestDTO(
+                    loan.getId(),
+                    loan.getUser().getId(),
+                    loan.getLoanDate(),
+                    loan.getReturnDate());
+            finesApiClient.createFine(request);
+        } catch (Exception e) {
+            log.error("Failed to notify fines-api for loan {}: {}", loan.getId(), e.getMessage());
+        }
     }
 
     public List<LoanResponseDTO> findAllLoans() {

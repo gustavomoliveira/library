@@ -6,6 +6,8 @@ import dev.gustavo.pblibrary.domain.user.User;
 import dev.gustavo.pblibrary.domain.user.UserRepository;
 import dev.gustavo.pblibrary.exception.BusinessException;
 import dev.gustavo.pblibrary.exception.ResourceNotFoundException;
+import dev.gustavo.pblibrary.infrastructure.client.FineRequestDTO;
+import dev.gustavo.pblibrary.infrastructure.client.FinesApiClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +40,9 @@ class LoanServiceTest {
 
     @Mock
     private LoanHistoryRepository loanHistoryRepository;
+
+    @Mock
+    private FinesApiClient finesApiClient;
 
     @InjectMocks
     private LoanService service;
@@ -181,6 +186,43 @@ class LoanServiceTest {
 
         verify(bookRepository, never()).save(any());
         verify(loanHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    void returnLoan_deveNotificarFinesApiComDadosCorretos() {
+        LocalDate loanDate = LocalDate.now().minusDays(20);
+        loan.setLoanDate(loanDate);
+        loan.setReturnDate(null);
+
+        when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
+        when(loanRepository.save(any(Loan.class))).thenReturn(loan);
+
+        service.returnLoan(1L);
+
+        ArgumentCaptor<FineRequestDTO> requestCaptor = ArgumentCaptor.forClass(FineRequestDTO.class);
+        verify(finesApiClient).createFine(requestCaptor.capture());
+
+        FineRequestDTO request = requestCaptor.getValue();
+        assertThat(request.loanId()).isEqualTo(loan.getId());
+        assertThat(request.userId()).isEqualTo(user.getId());
+        assertThat(request.loanDate()).isEqualTo(loanDate);
+        assertThat(request.returnDate()).isEqualTo(loan.getReturnDate());
+    }
+
+    @Test
+    void returnLoan_quandoFinesApiFalha_naoDeveInterromperADevolucao() {
+        loan.setReturnDate(null);
+
+        when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
+        when(loanRepository.save(any(Loan.class))).thenReturn(loan);
+        when(finesApiClient.createFine(any(FineRequestDTO.class)))
+                .thenThrow(new RuntimeException("fines-api indisponível"));
+
+        LoanResponseDTO response = service.returnLoan(1L);
+
+        assertThat(response.returnDate()).isEqualTo(LocalDate.now());
+        verify(loanRepository).save(loan);
+        verify(loanHistoryRepository).save(any(LoanHistory.class));
     }
 
     @Test
