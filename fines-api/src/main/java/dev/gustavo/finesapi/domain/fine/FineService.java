@@ -31,6 +31,11 @@ public class FineService {
         return fines.stream().map(FineMapper::toDTO).toList();
     }
 
+    public List<FineResponseDTO> findAllFines() {
+        List<Fine> fines = repository.findAll();
+        return fines.stream().map(FineMapper::toDTO).toList();
+    }
+
     public FineResponseDTO payFine(Long id) {
         Fine fine = repository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Fine not found."));
         fine.pay();

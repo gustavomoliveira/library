@@ -35,6 +35,12 @@ public class FineController {
         return ResponseEntity.status(HttpStatus.OK).body(response);
     }
 
+    @GetMapping
+    public ResponseEntity<List<FineResponseDTO>> getFines() {
+        List<FineResponseDTO> response = service.findAllFines();
+        return ResponseEntity.status(HttpStatus.OK).body(response);
+    }
+
     @PatchMapping("/{id}/pay")
     public ResponseEntity<FineResponseDTO> payFine(@PathVariable Long id) {
         FineResponseDTO response = service.payFine(id);

@@ -1,5 +1,5 @@
 import styles from './HomePage.module.css';
-import { BookList, Header, LoanList, UserList } from "../../components/index.js";
+import { BookList, FineList, Header, LoanList, UserList } from "../../components/index.js";
 
 export default function HomePage() {
     return (
@@ -8,6 +8,7 @@ export default function HomePage() {
             <BookList />
             <UserList />
             <LoanList />
+            <FineList />
         </div>
     )
 }
