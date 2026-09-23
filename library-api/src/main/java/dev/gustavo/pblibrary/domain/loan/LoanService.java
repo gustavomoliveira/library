@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -25,15 +26,17 @@ public class LoanService {
     private final UserRepository userRepository;
     private final LoanHistoryRepository loanHistoryRepository;
     private final FinesApiClient finesApiClient;
+    private final ApplicationEventPublisher eventPublisher;
 
     public LoanService(LoanRepository loanRepository, BookRepository bookRepository,
                        UserRepository userRepository, LoanHistoryRepository loanHistoryRepository,
-                       FinesApiClient finesApiClient) {
+                       FinesApiClient finesApiClient, ApplicationEventPublisher eventPublisher) {
         this.loanRepository = loanRepository;
         this.bookRepository = bookRepository;
         this.userRepository = userRepository;
         this.loanHistoryRepository = loanHistoryRepository;
         this.finesApiClient = finesApiClient;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -70,6 +73,12 @@ public class LoanService {
 
         Loan savedLoan = loanRepository.save(loan);
         loanHistoryRepository.save(new LoanHistory(savedLoan, LoanEventType.LOAN_RETURNED));
+
+        eventPublisher.publishEvent(new LoanReturnedEvent(
+                savedLoan.getId(),
+                savedLoan.getUser().getId(),
+                savedLoan.getLoanDate(),
+                savedLoan.getReturnDate()));
 
         notifyFinesApi(savedLoan);
 
