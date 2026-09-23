@@ -25,6 +25,11 @@ public class LoanReturnedListener {
     public void onLoanReturned(LoanReturnedEvent event) {
         log.info("LoanReturnedEvent recebido para o empréstimo {}", event.loanId());
 
+        if (fineService.existsByLoanId(event.loanId())) {
+            log.info("Multa para o empréstimo {} já existe, evento duplicado ignorado", event.loanId());
+            return;
+        }
+
         FineRequestDTO request = new FineRequestDTO(
                 event.loanId(),
                 event.userId(),

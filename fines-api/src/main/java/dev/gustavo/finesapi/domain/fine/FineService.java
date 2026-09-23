@@ -42,4 +42,8 @@ public class FineService {
         Fine savedFine = repository.save(fine);
         return FineMapper.toDTO(savedFine);
     }
+
+    public boolean existsByLoanId(Long loanId) {
+        return repository.existsByLoanId(loanId);
+    }
 }
