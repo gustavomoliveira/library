@@ -1,0 +1,24 @@
+services:
+  rabbitmq:
+    image: rabbitmq:4-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  fines-db:
+    image: postgres:17
+    container_name: fines-db
+    environment:
+      POSTGRES_DB: fines_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - fines-db-data:/var/lib/postgresql/data
+
+volumes:
+  fines-db-data:
+    external: true
+    name: fines-db-data
