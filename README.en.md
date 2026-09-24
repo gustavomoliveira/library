@@ -1,20 +1,21 @@
 # pblibrary — Library Management System
 
-Library management system built as the integrative project for the **Scalable Software Engineering** course. The project was deliberately evolved from a layered monolith into a microservices architecture, applying Domain-Driven Design, Spring Cloud, and distributed communication concepts in practice.
+Library management system built as the integrative project for the **Scalable Software Engineering** course. The project was deliberately evolved from a layered monolith into an event-driven microservices architecture, applying Domain-Driven Design, Spring Cloud, and distributed communication concepts in practice.
 
-> 🇧🇷 Leia em português: [README.md](./README.md)
+> 🇧🇷 Leia em português: [README.md](README.md)
 
 ---
 
 ## About the project
 
-The system supports book and user registration, loan and return management, per-loan audit history, and automatic calculation of overdue fines — the latter implemented as an independent microservice, communicating with the monolith through Service Discovery (Eureka) and a Feign Client.
+The system supports book and user registration, loan and return management, per-loan audit history, and automatic calculation of overdue fines — the latter implemented as an independent microservice, communicating with the monolith **asynchronously**, via RabbitMQ.
 
-The project was built across three progressive deliveries:
+The project was built across four progressive deliveries:
 
 1. **Layered monolith** — Spring Boot, Controller/Service/Repository, domain-driven modeling, React front-end consuming the API.
 2. **Real persistence layer** — JPA/Spring Data, loan audit history, full automated test suite (unit, `@DataJpaTest`, `@WebMvcTest`, integration).
-3. **Microservice extraction** — creation of `fines-api` as an independent service, with its own database, communicating via Spring Cloud (Eureka + OpenFeign), with resilience to network failures.
+3. **Microservice extraction** — creation of `fines-api` as an independent service, with its own database, initially communicating via Spring Cloud (Eureka + OpenFeign), with resilience to network failures.
+4. **Event-driven architecture** — the synchronous Feign call was replaced by event publishing/consumption through RabbitMQ, decoupling `library-api` from `fines-api` in time as well as over the network, and adding a Dead Letter Queue and an idempotent consumer. Full details, including validated failure scenarios, in [`ARQUITETURA-EVENTOS.md`](./ARQUITETURA-EVENTOS.md) (Portuguese).
 
 ---
 
@@ -24,38 +25,49 @@ The project was built across three progressive deliveries:
                          ┌─────────────────────┐
                          │   discovery-server  │
                          │   (Eureka Server)   │
-                         │      porta 8761     │
+                         │      port 8761      │
                          └───────────┬─────────┘
-                                     │  registro / descoberta
+                                     │  registration
                     ┌────────────────┴─────────────────┐
                     │                                  │
           ┌─────────▼──────────┐             ┌─────────▼──────────┐
-          │    library-api     │──Feign────▶ │     fines-api      │
-          │   (monólito)       │  (multas)   │  (microsserviço)   │
-          │    porta 8080      │             │    porta 8081      │
+          │    library-api     │             │     fines-api      │
+          │    (monolith)      │             │   (microservice)   │
+          │     port 8080      │             │     port 8081      │
           └─────────┬──────────┘             └─────────┬──────────┘
                     │                                   │
-          ┌─────────▼──────────┐             ┌─────────▼──────────┐
-          │  PostgreSQL        │             │  PostgreSQL        │
-          │  library_db        │             │  fines_db (Docker) │
-          │  porta 5433        │             │  porta 5434        │
-          └────────────────────┘             └────────────────────┘
+                    │ publishes event           consumes event
+                    │ (loan.returned)                   │
+                    └───────────────┬───────────────────┘
+                                    ▼
+                        ┌───────────────────────┐
+                        │       RabbitMQ         │
+                        │ exchange: library.events │
+                        │ queue: fines.loan-returned │
+                        │ DLQ: fines.loan-returned.dlq │
+                        └───────────────────────┘
+
+          ┌────────────┐                     ┌────────────┐
+          │ PostgreSQL │                     │ PostgreSQL │
+          │ library_db │                     │  fines_db  │
+          │ port 5433  │                     │ port 5434  │
+          └────────────┘                     └────────────┘
 
           ┌─────────────────────┐
           │  library-frontend   │
           │  (React + Vite)     │
-          │  porta 5173         │
+          │     port 5173       │
           └─────────────────────┘
-                consome library-api (8080)
-                e fines-api (8081) diretamente
+              consumes library-api (8080)
+              and fines-api (8081) directly
 ```
 
 ### Key architectural decisions
 
 - **Monolith First**: `Book`, `User`, and `Loan` remain in the monolith because `Loan` atomically depends on both within a `@Transactional` boundary — extracting them would introduce real distributed-consistency issues (loss of atomicity, need for a Saga pattern) without a proportional benefit.
 - **Fines as a microservice**: an isolated subdomain, event-triggered (on loan return), with its own fully separate database, with the fine-calculation rule encapsulated exclusively inside the service itself — the monolith only sends raw data (dates), never knowing *how* the fine is calculated.
-- **Resilience**: the call from the monolith to `fines-api` is wrapped in exception handling — if `fines-api` is unavailable, the book return (the core functionality) still completes normally; the failure is only logged.
-- **No shared library between services**: each microservice re-implements its own exception classes and DTOs, even at the cost of minor duplication — a conscious trade-off to keep services independently deployable.
+- **Event-driven communication (RabbitMQ)**: `library-api` publishes a domain event (`LoanReturnedEvent`) to a topic exchange after the loan-return transaction commits; `fines-api` consumes that event independently. This replaces the synchronous Feign call used through the third delivery — returning a book no longer depends on `fines-api`'s availability at that exact moment. Full breakdown (trade-offs, Dead Letter Queue, consumer idempotency) in [`ARQUITETURA-EVENTOS.md`](./ARQUITETURA-EVENTOS.md) (Portuguese).
+- **No shared library between services**: each microservice re-implements its own exception classes and DTOs (and now its own copy of the event contract), even at the cost of minor duplication — a conscious trade-off to keep services independently deployable.
 
 ---
 
@@ -67,6 +79,7 @@ The project was built across three progressive deliveries:
   /fines-api             → fine-calculation microservice
   /discovery-server        → Eureka Server (Service Discovery)
   /library-frontend          → React + Vite front-end
+  docker-compose.yml         → RabbitMQ + fines-api database
 ```
 
 Each Java project is an **independent** Maven module (no parent aggregator `pom.xml`), reflecting the philosophy of independently deployable microservices.
@@ -77,11 +90,12 @@ Each Java project is an **independent** Maven module (no parent aggregator `pom.
 
 | Layer | Technology |
 |---|---|
-| Backend | Java 21, Spring Boot 4.0.x, Spring Data JPA, Spring Cloud (Netflix Eureka, OpenFeign) |
+| Backend | Java 21, Spring Boot 4.0.x, Spring Data JPA, Spring Cloud (Netflix Eureka), Spring AMQP |
+| Messaging | RabbitMQ (topic exchange, Dead Letter Queue) |
 | Persistence | PostgreSQL (production), H2 (tests) |
 | Testing | JUnit 5, Mockito, AssertJ, MockMvc, `@DataJpaTest`, `@WebMvcTest` |
 | Front-end | React 19, Vite, CSS Modules |
-| Infrastructure | Docker (`fines-api` database), Maven |
+| Infrastructure | Docker Compose (RabbitMQ + `fines-api` database), Maven |
 | Version control | Git + GitFlow, Conventional Commits |
 
 ---
@@ -96,19 +110,13 @@ Each Java project is an **independent** Maven module (no parent aggregator `pom.
 - Docker Desktop
 - PostgreSQL running locally on port `5433` (database `library_db`)
 
-### 1. Start the `fines-api` database via Docker
+### 1. Start the infrastructure (RabbitMQ + `fines-api` database) via Docker Compose
 
 ```bash
-docker run --name fines-postgres \
-  -e POSTGRES_DB=fines_db \
-  -e POSTGRES_USER=postgres \
-  -e POSTGRES_PASSWORD=postgres \
-  -p 5434:5432 \
-  -v fines-postgres-data:/var/lib/postgresql/data \
-  -d postgres:17
+docker compose up -d
 ```
 
-On subsequent runs, just use `docker start fines-postgres`.
+This starts RabbitMQ (ports `5672` and `15672`, management UI at **http://localhost:15672**, username/password `guest`/`guest`) and the `fines_db` database (port `5434`).
 
 ### 2. Start the services in order
 
@@ -149,7 +157,7 @@ Access at **http://localhost:5173**.
 | POST | `/users` | Registers a user |
 | GET | `/users` | Lists users |
 | POST | `/loans` | Creates a loan |
-| PATCH | `/loans/{id}/return` | Registers a return (triggers a notification to `fines-api` when overdue) |
+| PATCH | `/loans/{id}/return` | Registers a return (publishes a `loan.returned` event to RabbitMQ) |
 | GET | `/loans/active` | Lists active loans |
 | GET | `/loans/{id}/history` | Loan event history |
 
@@ -163,13 +171,15 @@ Access at **http://localhost:5173**.
 | GET | `/fines/user/{userId}` | Lists a user's fines |
 | PATCH | `/fines/{id}/pay` | Marks a fine as paid |
 
-**Business rule:** default 14-day loan period; a R$ 3.00 fine per overdue day, calculated entirely by `fines-api` from the `loanDate` and `returnDate` received from the monolith.
+**Business rule:** default 14-day loan period; a R$ 3.00 fine per overdue day, calculated entirely by `fines-api`.
+
+> As of the fourth delivery, the main trigger for fine creation is consuming the `LoanReturnedEvent` via RabbitMQ, published by `library-api` after a loan return — replacing the synchronous Feign call used through the third delivery.
 
 ---
 
 ## Automated tests
 
-Each Java service has its own test suite, following the same pattern: Mockito-based unit tests for services, `@DataJpaTest` repository tests (in-memory H2 database), `@WebMvcTest` controller tests, and transactional integration tests where applicable.
+Each Java service has its own test suite, following the same pattern: Mockito-based unit tests for services, `@DataJpaTest` repository tests (in-memory H2 database), `@WebMvcTest` controller tests, transactional integration tests where applicable, and messaging-specific tests (event publishing in `library-api`; consumption, idempotency, and failure scenarios in `fines-api`).
 
 ```bash
 cd library-api && ./mvnw test
@@ -180,4 +190,4 @@ cd fines-api && ./mvnw test
 
 ## Academic context
 
-Developed for the Scalable Software Engineering course, with a pedagogical focus on: layered architecture, tactical DDD, persistence with Spring Data JPA, automated testing, and distributed communication with Spring Cloud (Service Discovery and Feign Client).
+Developed for the Scalable Software Engineering course, with a pedagogical focus on: layered architecture, tactical DDD, persistence with Spring Data JPA, automated testing, distributed communication with Spring Cloud (Service Discovery), and event-driven architecture with RabbitMQ (pub/sub, Dead Letter Queue, idempotent consumer).
