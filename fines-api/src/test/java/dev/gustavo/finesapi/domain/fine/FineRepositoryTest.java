@@ -3,11 +3,13 @@ package dev.gustavo.finesapi.domain.fine;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.LocalDate;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 
 @DataJpaTest
 class FineRepositoryTest {
@@ -31,5 +33,27 @@ class FineRepositoryTest {
         List<Fine> result = repository.findByUserId(99L);
 
         assertThat(result).isEmpty();
+    }
+
+    @Test
+    void existsByLoanId_quandoExisteMulta_deveRetornarTrue() {
+        repository.save(Fine.calculate(200L, 1L, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 25)).orElseThrow());
+
+        assertThat(repository.existsByLoanId(200L)).isTrue();
+    }
+
+    @Test
+    void existsByLoanId_quandoNaoExisteMulta_deveRetornarFalse() {
+        assertThat(repository.existsByLoanId(999L)).isFalse();
+    }
+
+    @Test
+    void save_multaDuplicadaParaMesmoEmprestimo_deveViolarRestricaoUnique() {
+        repository.saveAndFlush(Fine.calculate(300L, 1L, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 25)).orElseThrow());
+
+        Fine duplicada = Fine.calculate(300L, 1L, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 25)).orElseThrow();
+
+        assertThatThrownBy(() -> repository.saveAndFlush(duplicada))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 }
