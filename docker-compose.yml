@@ -18,6 +18,16 @@ services:
     volumes:
       - fines-db-data:/var/lib/postgresql/data
 
+  config-server:
+    build: ./config-server
+    container_name: config-server
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./config-repo:/config-repo
+    environment:
+      - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=file:///config-repo
+
 volumes:
   fines-db-data:
     external: true
