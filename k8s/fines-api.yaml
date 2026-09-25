@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fines-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fines-api
+  template:
+    metadata:
+      labels:
+        app: fines-api
+    spec:
+      containers:
+        - name: fines-api
+          image: library-fines-api:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8081
+          env:
+            - name: SPRING_CONFIG_IMPORT
+              value: optional:configserver:http://config-server:8888
+            - name: EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE
+              value: http://discovery-server:8761/eureka/
+            - name: SPRING_DATASOURCE_URL
+              value: jdbc:postgresql://fines-db:5432/fines_db
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbitmq
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: fines-api
+spec:
+  selector:
+    app: fines-api
+  ports:
+    - port: 8081
+      targetPort: 8081
