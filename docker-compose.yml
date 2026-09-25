@@ -54,7 +54,36 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://fines-db:5432/fines_db
       - SPRING_RABBITMQ_HOST=rabbitmq
 
+  library-db:
+    image: postgres:17
+    container_name: library-db
+    environment:
+      POSTGRES_DB: library_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "351909"
+    ports:
+      - "5435:5432"
+    volumes:
+      - library-db-data:/var/lib/postgresql/data
+
+  library-api:
+    build: ./library-api
+    container_name: library-api
+    depends_on:
+      - config-server
+      - discovery-server
+      - library-db
+      - rabbitmq
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://library-db:5432/library_db
+      - SPRING_RABBITMQ_HOST=rabbitmq
+
 volumes:
   fines-db-data:
     external: true
     name: fines-db-data
+  library-db-data:
