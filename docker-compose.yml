@@ -82,6 +82,20 @@ services:
       - SPRING_DATASOURCE_URL=jdbc:postgresql://library-db:5432/library_db
       - SPRING_RABBITMQ_HOST=rabbitmq
 
+  api-gateway:
+    build: ./api-gateway
+    container_name: api-gateway
+    depends_on:
+      - config-server
+      - discovery-server
+      - library-api
+      - fines-api
+    ports:
+      - "8082:8082"
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://discovery-server:8761/eureka/
+
 volumes:
   fines-db-data:
     external: true
