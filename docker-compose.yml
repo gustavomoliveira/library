@@ -38,6 +38,22 @@ services:
     environment:
       - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
 
+  fines-api:
+    build: ./fines-api
+    container_name: fines-api
+    depends_on:
+      - config-server
+      - discovery-server
+      - fines-db
+      - rabbitmq
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://fines-db:5432/fines_db
+      - SPRING_RABBITMQ_HOST=rabbitmq
+
 volumes:
   fines-db-data:
     external: true
