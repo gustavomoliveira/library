@@ -28,6 +28,16 @@ services:
     environment:
       - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=file:///config-repo
 
+  discovery-server:
+    build: ./discovery-server
+    container_name: discovery-server
+    depends_on:
+      - config-server
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+
 volumes:
   fines-db-data:
     external: true
