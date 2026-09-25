@@ -96,6 +96,14 @@ services:
       - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
       - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://discovery-server:8761/eureka/
 
+  library-frontend:
+    build: ./library-frontend
+    container_name: library-frontend
+    depends_on:
+      - api-gateway
+    ports:
+      - "5173:80"
+
 volumes:
   fines-db-data:
     external: true
