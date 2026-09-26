@@ -2,12 +2,11 @@ name: CI - discovery-server
 
 on:
   push:
-    branches: [main, develop]
     paths:
-      - 'discovery-server/**'
+      - 'library-api/**'
   pull_request:
     paths:
-      - 'discovery-server/**'
+      - 'library-api/**'
 
 jobs:
   build:

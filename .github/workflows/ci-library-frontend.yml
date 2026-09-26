@@ -2,12 +2,11 @@ name: CI - library-frontend
 
 on:
   push:
-    branches: [main, develop]
     paths:
-      - 'library-frontend/**'
+      - 'library-api/**'
   pull_request:
     paths:
-      - 'library-frontend/**'
+      - 'library-api/**'
 
 jobs:
   build:

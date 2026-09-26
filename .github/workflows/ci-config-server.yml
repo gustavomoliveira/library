@@ -2,12 +2,11 @@ name: CI - config-server
 
 on:
   push:
-    branches: [main, develop]
     paths:
-      - 'config-server/**'
+      - 'library-api/**'
   pull_request:
     paths:
-      - 'config-server/**'
+      - 'library-api/**'
 
 jobs:
   build:

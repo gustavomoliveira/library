@@ -2,12 +2,11 @@ name: CI - api-gateway
 
 on:
   push:
-    branches: [main, develop]
     paths:
-      - 'api-gateway/**'
+      - 'library-api/**'
   pull_request:
     paths:
-      - 'api-gateway/**'
+      - 'library-api/**'
 
 jobs:
   build:

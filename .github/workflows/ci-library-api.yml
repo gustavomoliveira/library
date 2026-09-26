@@ -2,7 +2,6 @@ name: CI - library-api
 
 on:
   push:
-    branches: [main, develop]
     paths:
       - 'library-api/**'
   pull_request:

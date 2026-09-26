@@ -2,12 +2,11 @@ name: CI - fines-api
 
 on:
   push:
-    branches: [main, develop]
     paths:
-      - 'fines-api/**'
+      - 'library-api/**'
   pull_request:
     paths:
-      - 'fines-api/**'
+      - 'library-api/**'
 
 jobs:
   build:
