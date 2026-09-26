@@ -37,4 +37,6 @@ public class Book {
         this.totalCopies = totalCopies;
         this.availableCopies = totalCopies;
     }
+
+    //teste de ci/cd
 }
