@@ -18,42 +18,6 @@ services:
     volumes:
       - fines-db-data:/var/lib/postgresql/data
 
-  config-server:
-    build: ./config-server
-    container_name: config-server
-    ports:
-      - "8888:8888"
-    volumes:
-      - ./config-repo:/config-repo
-    environment:
-      - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=file:///config-repo
-
-  discovery-server:
-    build: ./discovery-server
-    container_name: discovery-server
-    depends_on:
-      - config-server
-    ports:
-      - "8761:8761"
-    environment:
-      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
-
-  fines-api:
-    build: ./fines-api
-    container_name: fines-api
-    depends_on:
-      - config-server
-      - discovery-server
-      - fines-db
-      - rabbitmq
-    ports:
-      - "8081:8081"
-    environment:
-      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
-      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://discovery-server:8761/eureka/
-      - SPRING_DATASOURCE_URL=jdbc:postgresql://fines-db:5432/fines_db
-      - SPRING_RABBITMQ_HOST=rabbitmq
-
   library-db:
     image: postgres:17
     container_name: library-db
@@ -66,14 +30,66 @@ services:
     volumes:
       - library-db-data:/var/lib/postgresql/data
 
+  config-server:
+    build: ./config-server
+    container_name: config-server
+    ports:
+      - "8888:8888"
+    volumes:
+      - ./config-repo:/config-repo
+    environment:
+      - SPRING_CLOUD_CONFIG_SERVER_GIT_URI=file:///config-repo
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8888/actuator/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  discovery-server:
+    build: ./discovery-server
+    container_name: discovery-server
+    depends_on:
+      config-server:
+        condition: service_healthy
+    ports:
+      - "8761:8761"
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+
+  fines-api:
+    build: ./fines-api
+    container_name: fines-api
+    depends_on:
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_started
+      fines-db:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
+    ports:
+      - "8081:8081"
+    environment:
+      - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
+      - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://fines-db:5432/fines_db
+      - SPRING_RABBITMQ_HOST=rabbitmq
+      - MANAGEMENT_ZIPKIN_TRACING_ENDPOINT=http://zipkin:9411/api/v2/spans
+
   library-api:
     build: ./library-api
     container_name: library-api
     depends_on:
-      - config-server
-      - discovery-server
-      - library-db
-      - rabbitmq
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_started
+      library-db:
+        condition: service_started
+      rabbitmq:
+        condition: service_started
     ports:
       - "8080:8080"
     environment:
@@ -81,20 +97,26 @@ services:
       - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://discovery-server:8761/eureka/
       - SPRING_DATASOURCE_URL=jdbc:postgresql://library-db:5432/library_db
       - SPRING_RABBITMQ_HOST=rabbitmq
+      - MANAGEMENT_ZIPKIN_TRACING_ENDPOINT=http://zipkin:9411/api/v2/spans
 
   api-gateway:
     build: ./api-gateway
     container_name: api-gateway
     depends_on:
-      - config-server
-      - discovery-server
-      - library-api
-      - fines-api
+      config-server:
+        condition: service_healthy
+      discovery-server:
+        condition: service_started
+      library-api:
+        condition: service_started
+      fines-api:
+        condition: service_started
     ports:
       - "8082:8082"
     environment:
       - SPRING_CONFIG_IMPORT=optional:configserver:http://config-server:8888
       - EUREKA_CLIENT_SERVICE-URL_DEFAULTZONE=http://discovery-server:8761/eureka/
+      - MANAGEMENT_ZIPKIN_TRACING_ENDPOINT=http://zipkin:9411/api/v2/spans
 
   library-frontend:
     build: ./library-frontend
@@ -103,6 +125,12 @@ services:
       - api-gateway
     ports:
       - "5173:80"
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: zipkin
+    ports:
+      - "9411:9411"
 
 volumes:
   fines-db-data:
