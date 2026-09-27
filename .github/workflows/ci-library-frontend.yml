@@ -1,0 +1,31 @@
+name: CI - library-frontend
+
+on:
+  push:
+    paths:
+      - 'library-api/**'
+  pull_request:
+    paths:
+      - 'library-api/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: library-frontend/package-lock.json
+
+      - name: Instalar dependencias e buildar
+        working-directory: library-frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Confirmar que o Dockerfile builda
+        run: docker build -t library-frontend:ci ./library-frontend

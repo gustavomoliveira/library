@@ -1,193 +1,206 @@
 # pblibrary — Sistema de Gestão de Biblioteca
 
-Sistema de gestão de biblioteca desenvolvido como projeto integrador da disciplina de **Engenharia de Softwares Escaláveis**. O projeto evoluiu deliberadamente de um monólito em camadas para uma arquitetura de microsserviços orientada a eventos, aplicando na prática conceitos de Domain-Driven Design, Spring Cloud e comunicação distribuída.
+Sistema de gestão de biblioteca desenvolvido como projeto integrador da disciplina de **Engenharia de Softwares Escaláveis** (Instituto Infnet), evoluindo progressivamente, em cinco entregas, de um monólito simples até uma arquitetura de microsserviços orientada a eventos, conteinerizada e observável.
 
 > 🇬🇧 Read this in English: [README.en.md](README.en.md)
 
----
+## Sumário
 
-## Sobre o projeto
+- [Visão geral da arquitetura](#visão-geral-da-arquitetura)
+- [Serviços e portas](#serviços-e-portas)
+- [Stack tecnológica](#stack-tecnológica)
+- [Pré-requisitos](#pré-requisitos)
+- [Como rodar com Docker Compose](#como-rodar-com-docker-compose)
+- [Como rodar com Kubernetes](#como-rodar-com-kubernetes-exercício-de-prática)
+- [Monitoramento](#monitoramento)
+- [CI/CD](#cicd)
+- [Estrutura do repositório](#estrutura-do-repositório)
+- [Endpoints principais](#endpoints-principais)
+- [Histórico evolutivo do projeto](#histórico-evolutivo-do-projeto)
+- [Limitações conhecidas](#limitações-conhecidas)
 
-O sistema permite o cadastro de livros e usuários, controle de empréstimos e devoluções, histórico de auditoria de cada empréstimo, e cálculo automático de multas por atraso na devolução — este último implementado como um microsserviço independente, comunicando-se com o monólito de forma **assíncrona**, via RabbitMQ.
+## Visão geral da arquitetura
 
-O projeto foi construído em quatro entregas progressivas:
-
-1. **Monólito em camadas** — Spring Boot, Controller/Service/Repository, modelagem DDD por domínio, front-end React consumindo a API.
-2. **Persistência real** — JPA/Spring Data, histórico de auditoria de empréstimos, testes automatizados completos (unitários, `@DataJpaTest`, `@WebMvcTest`, integração).
-3. **Extração de microsserviço** — criação do `fines-api` como serviço independente, com banco de dados próprio, comunicação inicial via Spring Cloud (Eureka + OpenFeign), e resiliência a falhas de rede.
-4. **Arquitetura orientada a eventos** — a comunicação síncrona via Feign foi substituída por publicação/consumo de eventos via RabbitMQ, desacoplando `library-api` de `fines-api` também no tempo (não apenas em rede) e implementando Dead Letter Queue e consumidor idempotente. Detalhes completos, incluindo cenários de falha validados, em [`ARQUITETURA-EVENTOS.md`](./ARQUITETURA-EVENTOS.md).
-
----
-
-## Arquitetura
+O sistema é composto por dois domínios de negócio (`library-api` e `fines-api`), comunicando-se de forma assíncrona via RabbitMQ, com toda a infraestrutura de suporte típica de uma arquitetura de microsserviços em Spring Cloud: descoberta de serviços, configuração centralizada e um API Gateway como ponto único de entrada.
 
 ```
-                         ┌─────────────────────┐
-                         │   discovery-server  │
-                         │   (Eureka Server)   │
-                         │      porta 8761     │
-                         └───────────┬─────────┘
-                                     │  registro
-                    ┌────────────────┴─────────────────┐
-                    │                                  │
-          ┌─────────▼──────────┐             ┌─────────▼──────────┐
-          │    library-api     │             │     fines-api      │
-          │   (monólito)       │             │  (microsserviço)   │
-          │    porta 8080      │             │    porta 8081      │
-          └─────────┬──────────┘             └─────────┬──────────┘
-                    │                                   │
-                    │ publica evento            consome evento
-                    │ (loan.returned)                   │
-                    └───────────────┬───────────────────┘
-                                    ▼
-                        ┌───────────────────────┐
-                        │       RabbitMQ         │
-                        │  exchange: library.events │
-                        │  fila: fines.loan-returned │
-                        │  DLQ: fines.loan-returned.dlq │
-                        └───────────────────────┘
+                         ┌──────────────────┐
+                         │ library-frontend │  (React)
+                         └─────────┬────────┘
+                                   │ HTTP
+                                   ▼
+                         ┌──────────────────┐
+                         │    api-gateway   │  (Spring Cloud Gateway)
+                         └─────────┬────────┘
+                     ┌─────────────┴─────────────┐
+                     ▼                           ▼
+             ┌───────────────┐           ┌───────────────┐
+             │  library-api  │           │   fines-api   │
+             │  (monólito)   │──eventos─▶│(microsserviço)│
+             └───────┬───────┘  RabbitMQ └───────┬───────┘
+                     │                           │
+                     ▼                           ▼
+             ┌───────────────┐           ┌───────────────┐
+             │  library-db   │           │   fines-db    │
+             │  (Postgres)   │           │  (Postgres)   │
+             └───────────────┘           └───────────────┘
 
-          ┌────────────┐                     ┌────────────┐
-          │ PostgreSQL │                     │ PostgreSQL │
-          │ library_db │                     │  fines_db  │
-          │ porta 5433 │                     │ porta 5434 │
-          └────────────┘                     └────────────┘
-
-          ┌─────────────────────┐
-          │  library-frontend   │
-          │  (React + Vite)     │
-          │  porta 5173         │
-          └─────────────────────┘
-                consome library-api (8080)
-                e fines-api (8081) diretamente
+        Infraestrutura compartilhada por todos os serviços acima:
+        ┌──────────────────┐   ┌──────────────────┐
+        │ discovery-server │   │   config-server  │
+        │   (Eureka)       │   │(Spring Cloud Config,│
+        │                  │   │  Git-backed)     │
+        └──────────────────┘   └──────────────────┘
 ```
 
-### Decisões arquiteturais principais
+`library-api` é o monólito original do sistema — cadastro de livros, usuários e empréstimos — que permanece monolítico deliberadamente (`Book`, `User` e `Loan` têm forte acoplamento transacional entre si; decompor exigiria Saga patterns sem benefício proporcional nesta escala). `fines-api` foi extraído como o único microsserviço do sistema, responsável pelo cálculo e gestão de multas por atraso, reagindo a eventos de empréstimo publicados pelo `library-api` via RabbitMQ — não há chamada síncrona entre os dois domínios de negócio.
 
-- **Monolith First**: `Book`, `User` e `Loan` permanecem no monólito porque `Loan` depende atomicamente dos outros dois dentro de uma transação (`@Transactional`) — extraí-los geraria problemas reais de consistência distribuída (perda de atomicidade, necessidade de Saga pattern) sem ganho proporcional.
-- **Fines como microsserviço**: subdomínio isolado, com gatilho por evento (na devolução do empréstimo), banco de dados próprio e completamente separado, e regra de cálculo de multa encapsulada exclusivamente no próprio serviço — o monólito envia apenas dados brutos (datas), nunca sabe *como* a multa é calculada.
-- **Comunicação orientada a eventos (RabbitMQ)**: `library-api` publica um evento de domínio (`LoanReturnedEvent`) em um exchange topic após o commit da devolução do empréstimo; `fines-api` consome esse evento de forma independente. Isso substitui a chamada síncrona via Feign usada até a terceira entrega — a devolução do livro não depende mais da disponibilidade do `fines-api` no mesmo instante. Detalhamento completo (incluindo trade-offs, Dead Letter Queue e idempotência do consumidor) em [`ARQUITETURA-EVENTOS.md`](./ARQUITETURA-EVENTOS.md).
-- **Sem biblioteca compartilhada entre serviços**: cada microsserviço recria suas próprias classes de exceção e DTOs (e, agora, sua própria cópia do contrato de evento), mesmo que isso gere pequena duplicação — trade-off consciente para manter os serviços deployáveis de forma independente.
+`discovery-server` (Netflix Eureka) permite que os serviços se descubram entre si pelo nome, sem hostports fixos. `config-server` (Spring Cloud Config) centraliza a configuração não sensível de todos os serviços — portas, URLs de outros serviços, feature flags — num repositório Git próprio (`config-repo/`), servida em tempo de execução; senhas e outras credenciais nunca ficam nesse repositório. `api-gateway` (Spring Cloud Gateway Server WebMVC) é o único ponto de entrada HTTP do sistema visto de fora: roteia `/books`, `/users`, `/loans` para o `library-api` e `/fines` para o `fines-api`, resolvendo o destino real de cada requisição via Eureka.
 
----
+## Serviços e portas
+
+| Serviço | Porta | Descrição |
+|---|---|---|
+| `library-frontend` | 5173 | Interface web (React) |
+| `api-gateway` | 8082 | Ponto único de entrada HTTP |
+| `library-api` | 8080 | Monólito: livros, usuários, empréstimos |
+| `fines-api` | 8081 | Microsserviço: multas |
+| `discovery-server` | 8761 | Eureka — descoberta de serviços |
+| `config-server` | 8888 | Configuração centralizada |
+| `library-db` | 5435 → 5432 | Postgres do `library-api` |
+| `fines-db` | 5434 → 5432 | Postgres do `fines-api` |
+| `rabbitmq` | 5672 / 15672 | Mensageria / painel de administração |
+| `zipkin` | 9411 | Rastreamento distribuído (tracing) |
+| `loki` | 3100 | Armazenamento de logs |
+| `grafana` | 3000 | Visualização de logs e métricas |
+
+## Stack tecnológica
+
+- **Backend:** Java 21, Spring Boot 4, Spring Cloud (Config, Gateway, Netflix Eureka, OpenFeign onde aplicável), Spring Data JPA, Hibernate, PostgreSQL, RabbitMQ (Spring AMQP)
+- **Frontend:** React, Vite
+- **Observabilidade:** Micrometer Tracing + Zipkin, Grafana + Loki + Promtail
+- **Infraestrutura:** Docker, Docker Compose, Kubernetes (manifests próprios, sem Helm)
+- **CI:** GitHub Actions
+- **Build:** Maven (backend), npm (frontend)
+
+## Pré-requisitos
+
+- Docker Desktop (com Kubernetes habilitado, apenas se for usar essa parte)
+- Java 21 e Maven, apenas para rodar algum serviço fora de container
+- Node 22, apenas para rodar o frontend fora de container
+
+## Como rodar com Docker Compose
+
+Esta é a forma principal e recomendada de executar o sistema completo localmente.
+
+```bash
+docker compose up -d --build
+```
+
+Isso sobe os 12 containers do sistema (6 serviços da aplicação + Postgres x2, RabbitMQ, Zipkin, Loki, Promtail, Grafana), na ordem correta de dependência — o `config-server` precisa responder no endpoint de saúde antes que os demais serviços tentem buscar sua configuração.
+
+Após alguns segundos, valide a subida:
+
+```bash
+docker compose ps
+```
+
+Todos os serviços devem aparecer com status `Up` (o `config-server` deve mostrar `(healthy)`).
+
+Acesse a aplicação em **http://localhost:5173**.
+
+Para derrubar tudo:
+
+```bash
+docker compose down
+```
+
+## Como rodar com Kubernetes (exercício de prática)
+
+Os manifests em `k8s/` reproduzem a mesma arquitetura acima num cluster Kubernetes local (testado com o Kubernetes embutido no Docker Desktop). Esta parte não é usada para nenhuma entrega ou avaliação formal — foi construída como exercício de prática dessa competência.
+
+```bash
+kubectl apply -f k8s/secrets.yaml
+kubectl apply -f k8s/rabbitmq.yaml
+kubectl apply -f k8s/fines-db.yaml
+kubectl apply -f k8s/library-db.yaml
+kubectl apply -f k8s/config-server.yaml
+kubectl apply -f k8s/discovery-server.yaml
+kubectl apply -f k8s/fines-api.yaml
+kubectl apply -f k8s/library-api.yaml
+kubectl apply -f k8s/api-gateway.yaml
+kubectl apply -f k8s/library-frontend.yaml
+```
+
+```bash
+kubectl get pods
+```
+
+O frontend é exposto via `NodePort` em **http://localhost:30080**. Os demais serviços são internos ao cluster (`ClusterIP`) e, para inspeção manual, podem ser alcançados via `kubectl port-forward service/<nome> <porta>:<porta>`.
+
+Cada imagem usada nos manifests (`library-config-server`, `library-discovery-server`, etc.) precisa já existir localmente — construída via `docker compose build` — já que os manifests usam `imagePullPolicy: Never` (nenhuma imagem é publicada em registry externo).
+
+## Monitoramento
+
+O monitoramento roda via Docker Compose (não replicado em Kubernetes).
+
+**Rastreamento distribuído (tracing):** acesse o Zipkin em **http://localhost:9411**. Todas as requisições que atravessam o `api-gateway`, `library-api` e `fines-api` são rastreadas (amostragem de 100%, adequada para ambiente de desenvolvimento/demonstração). Use "Find a trace" para consultar por serviço.
+
+**Agregação de logs:** acesse o Grafana em **http://localhost:3000** (sem necessidade de login — autenticação anônima habilitada para este ambiente local). Vá em **Explore**, selecione a fonte de dados **Loki**, e use o rótulo `container` para filtrar os logs de qualquer serviço do sistema. O Promtail coleta automaticamente os logs de todos os containers Docker em execução, sem necessidade de configuração por serviço.
+
+## CI/CD
+
+O repositório usa GitHub Actions com um workflow por serviço (`.github/workflows/ci-*.yml`), disparado por push ou pull request que altere arquivos daquele serviço específico. Cada workflow:
+
+1. Roda os testes automatizados e o build Maven (ou `npm run build`, no caso do frontend) do serviço.
+2. Confirma que o `Dockerfile` do serviço builda com sucesso.
+
+Não há etapa de deploy contínuo (CD): a esteira termina na validação de build, sem publicar imagens em nenhum registry — esta entrega não inclui infraestrutura de nuvem para receber um deploy automatizado.
 
 ## Estrutura do repositório
 
 ```
-/library
-  /library-api          → monólito (Book, User, Loan)
-  /fines-api             → microsserviço de cálculo de multas
-  /discovery-server        → Eureka Server (Service Discovery)
-  /library-frontend          → front-end React + Vite
-  docker-compose.yml         → RabbitMQ + banco de dados do fines-api
+library/
+├── config-server/       # Spring Cloud Config Server
+├── config-repo/         # Repositório Git próprio com as configs servidas pelo config-server
+├── discovery-server/    # Eureka
+├── api-gateway/         # Spring Cloud Gateway
+├── library-api/         # Monólito: livros, usuários, empréstimos
+├── fines-api/           # Microsserviço: multas
+├── library-frontend/    # Frontend React
+├── k8s/                 # Manifests Kubernetes
+├── .github/workflows/   # Workflows de CI
+├── docker-compose.yml
+├── promtail-config.yml
+└── docs/                # Documentação de arquitetura e evidências das entregas anteriores
 ```
-
-Cada projeto Java é um módulo Maven **independente** (sem `pom.xml` pai agregador), refletindo a filosofia de microsserviços implantáveis separadamente.
-
----
-
-## Stack técnica
-
-| Camada | Tecnologia |
-|---|---|
-| Backend | Java 21, Spring Boot 4.0.x, Spring Data JPA, Spring Cloud (Netflix Eureka), Spring AMQP |
-| Mensageria | RabbitMQ (exchange topic, Dead Letter Queue) |
-| Persistência | PostgreSQL (produção), H2 (testes) |
-| Testes | JUnit 5, Mockito, AssertJ, MockMvc, `@DataJpaTest`, `@WebMvcTest` |
-| Front-end | React 19, Vite, CSS Modules |
-| Infraestrutura | Docker Compose (RabbitMQ + banco do `fines-api`), Maven |
-| Versionamento | Git + GitFlow, Conventional Commits (mensagens em português) |
-
----
-
-## Como rodar o projeto
-
-### Pré-requisitos
-
-- Java 21
-- Maven (ou usar o wrapper `./mvnw` incluso em cada projeto)
-- Node.js e npm
-- Docker Desktop
-- PostgreSQL rodando localmente na porta `5433` (banco `library_db`)
-
-### 1. Suba a infraestrutura (RabbitMQ + banco do `fines-api`) via Docker Compose
-
-```bash
-docker compose up -d
-```
-
-Isso sobe o RabbitMQ (portas `5672` e `15672`, painel de administração em **http://localhost:15672**, usuário/senha `guest`/`guest`) e o banco `fines_db` (porta `5434`).
-
-### 2. Suba os serviços na ordem
-
-```bash
-# 1. Eureka Server
-cd discovery-server && ./mvnw spring-boot:run
-
-# 2. Microsserviço de multas
-cd fines-api && ./mvnw spring-boot:run
-
-# 3. Monólito
-cd library-api && ./mvnw spring-boot:run
-```
-
-Confirme o registro dos serviços em **http://localhost:8761**.
-
-### 3. Suba o front-end
-
-```bash
-cd library-frontend
-npm install
-npm run dev
-```
-
-Acesse em **http://localhost:5173**.
-
----
 
 ## Endpoints principais
 
-### `library-api` (porta 8080)
+Todos acessados através do `api-gateway` (porta 8082):
 
-| Método | Endpoint | Descrição |
+| Método | Rota | Descrição |
 |---|---|---|
-| POST | `/books` | Cadastra um livro |
-| GET | `/books` | Lista livros (filtros por `title`/`author`) |
-| GET | `/books/{id}` | Busca livro por ID |
-| POST | `/users` | Cadastra um usuário |
-| GET | `/users` | Lista usuários |
-| POST | `/loans` | Cria um empréstimo |
-| PATCH | `/loans/{id}/return` | Registra a devolução (publica evento `loan.returned` no RabbitMQ) |
-| GET | `/loans/active` | Lista empréstimos ativos |
-| GET | `/loans/{id}/history` | Histórico de eventos do empréstimo |
+| `GET` | `/books` | Lista livros |
+| `POST` | `/books` | Cadastra livro |
+| `GET` | `/users` | Lista usuários |
+| `POST` | `/users` | Cadastra usuário |
+| `GET` | `/loans` | Lista empréstimos |
+| `POST` | `/loans` | Registra empréstimo |
+| `GET` | `/fines` | Lista multas |
 
-### `fines-api` (porta 8081)
+## Histórico evolutivo do projeto
 
-| Método | Endpoint | Descrição |
-|---|---|---|
-| POST | `/fines` | Calcula e registra uma multa (retorna `204` se não houver atraso) |
-| GET | `/fines` | Lista todas as multas |
-| GET | `/fines/{id}` | Busca multa por ID |
-| GET | `/fines/user/{userId}` | Lista multas de um usuário |
-| PATCH | `/fines/{id}/pay` | Marca a multa como paga |
+Este repositório documenta a evolução do projeto integrador da disciplina ao longo de cinco entregas sucessivas:
 
-**Regra de negócio:** prazo padrão de empréstimo de 14 dias; multa de R$ 3,00 por dia de atraso, calculada inteiramente pelo `fines-api`.
+1. **Monólito simples** — Spring Boot em camadas, primeira modelagem de domínio.
+2. **Camada de persistência real** — JPA/Hibernate, histórico de dados, testes automatizados.
+3. **Criação de um microsserviço** — extração do `fines-api`, comunicação síncrona via Feign.
+4. **Arquitetura orientada a eventos** — substituição do Feign por eventos assíncronos via RabbitMQ (ver `ARQUITETURA-EVENTOS.md`).
+5. **Implantação e operação** (esta entrega) — conteinerização com Docker, Kubernetes (prática), monitoramento (tracing e logs) e CI.
 
-> A partir da quarta entrega, o principal gatilho de criação de multa passou a ser o consumo do evento `LoanReturnedEvent` via RabbitMQ, publicado por `library-api` após a devolução do empréstimo — em vez da chamada síncrona via Feign usada até a terceira entrega.
+## Limitações conhecidas
 
----
-
-## Testes automatizados
-
-Cada serviço Java possui suíte própria de testes, seguindo o mesmo padrão: testes unitários de service com Mockito, testes de repositório com `@DataJpaTest` (banco H2 em memória), testes de controller com `@WebMvcTest`, testes de integração transacional onde aplicável, e testes específicos de mensageria (publicação de evento em `library-api`; consumo, idempotência e cenário de falha em `fines-api`).
-
-```bash
-cd library-api && ./mvnw test
-cd fines-api && ./mvnw test
-```
-
----
-
-## Contexto acadêmico
-
-Projeto desenvolvido para a disciplina de Engenharia de Softwares Escaláveis, com foco pedagógico em: arquitetura em camadas, DDD tático, persistência com Spring Data JPA, testes automatizados, comunicação distribuída com Spring Cloud (Service Discovery), e arquitetura orientada a eventos com RabbitMQ (pub/sub, Dead Letter Queue, consumidor idempotente).
+- Os bancos de dados conteinerizados (`library-db`, `fines-db`) iniciam vazios — os dados usados durante o desenvolvimento em ambiente local não foram migrados para os containers.
+- Não há Bean Validation, paginação, Swagger/OpenAPI ou Spring Security implementados — fora do escopo definido para as entregas realizadas.
+- O padrão Transactional Outbox (para garantir a publicação de eventos mesmo em caso de indisponibilidade do RabbitMQ) foi identificado como melhoria futura, mas não implementado.

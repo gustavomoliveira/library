@@ -1,0 +1,30 @@
+name: CI - discovery-server
+
+on:
+  push:
+    paths:
+      - 'library-api/**'
+  pull_request:
+    paths:
+      - 'library-api/**'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+          cache-dependency-path: discovery-server/pom.xml
+
+      - name: Rodar testes e build Maven
+        working-directory: discovery-server
+        run: ./mvnw clean package
+
+      - name: Confirmar que o Dockerfile builda
+        run: docker build -t discovery-server:ci ./discovery-server
