@@ -17,3 +17,4 @@ target/
 ### Node / Vite ###
 node_modules/
 dist/
+config-repo
